@@ -20,6 +20,7 @@ GcodeDispatch::GcodeDispatch(){}
 
 // Called when the module has just been loaded
 void GcodeDispatch::on_module_loaded() {
+    return_error_on_unhandled_gcode = this->kernel->config->value( return_error_on_unhandled_gcode_checksum )->by_default(false)->as_bool();
     this->register_for_event(ON_CONSOLE_LINE_RECEIVED);
     currentline = -1;
 }
@@ -60,7 +61,7 @@ void GcodeDispatch::on_console_line_received(void * line){
                 cs -= chksum;
             }
             //Strip line number value from possible_command
-            size_t lnsize = possible_command.find_first_of(" ") + 1;
+            size_t lnsize = possible_command.find_first_not_of("N0123456789.,- ");
             possible_command = possible_command.substr(lnsize);
 
         }else{
@@ -100,7 +101,14 @@ void GcodeDispatch::on_console_line_received(void * line){
                 this->kernel->call_event(ON_GCODE_RECEIVED, gcode );
                 if (gcode->add_nl)
                     new_message.stream->printf("\r\n");
-                new_message.stream->printf("ok\r\n");
+
+                if ( return_error_on_unhandled_gcode == true && gcode->accepted_by_module == false)
+                    new_message.stream->printf("ok (command unclaimed)\r\n");
+                else if(!gcode->txt_after_ok.empty()) {
+                    new_message.stream->printf("ok %s\r\n", gcode->txt_after_ok.c_str());
+                    gcode->txt_after_ok.clear();
+                }else
+                    new_message.stream->printf("ok\r\n");
 
                 delete gcode;
             
